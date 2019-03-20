@@ -1,0 +1,12 @@
+Shara:
+- Parafrasear Neuron y NeuronLayer
+- Agregar más layers
+- Accuracy, variance
+- Test
+- Agregar otra activation function
+
+Bernardo:
+- Parafrasear clase NeuralNerwork
+- Agregar una activation function y los parámetros necesarios para especificar cual usar
+- Regularization
+- Cross validation
