@@ -305,27 +305,29 @@ class Neuron:
 
 
 # predict y values for a complete set
-def predict_set(nn, x_set, params):
-    result = []
-    for i in range(0, len(x_set)):
-        y_hat = nn.predict(params, x_set[i])
-        result.append(round(y_hat))
-    return result
+def predict_set(nn, dataset):
+    actual = []
+    predicted = []
+    for i in range(0, len(dataset)):
+        y_hat = nn.feed_forward(dataset[i][0])
+        actual.append(dataset[i][1][0])
+        predicted.append(round(y_hat[0]))
+    return actual, predicted
 
 
 # Calculate accuracy percentage
 def accuracy_metric(actual, predicted):
     correct = 0
     for i in range(len(actual)):
-        if actual[i] == round(predicted[i]):
+        if actual[i] == predicted[i]:
             correct += 1
     return correct / float(len(actual)) * 100.0
 
 
 def main():
-    train_size = 0.9
-    l_rate = 0.3
-    num_epoch = 50
+    train_size = 0.8
+    l_rate = 0.03
+    num_epoch = 200000
 
     # load and prepare data
     filename = 'pima-indians-diabetes.csv'
@@ -336,20 +338,31 @@ def main():
     # split and format train and test set from dataset
     train, test = split_train_test(dataset, train_size)
 
-    nn = NeuralNetwork(l_rate, len(train[0][0]), 5, len(train[0][1]))
+    nn = NeuralNetwork(l_rate, len(train[0][0]), 20, len(train[0][1]))
     for i in range(num_epoch):
         training_inputs, training_outputs = random.choice(train)
         nn.train(training_inputs, training_outputs)
-        print(i, nn.calculate_total_error(train))
 
-    print("\nTest set error:")
+    print("\nTrain set error:")
+    print(nn.calculate_total_error(train))
+
+    print("\nTrain set accuracy:")
+    actual, predicted = predict_set(nn, train)
+    print(str(round(accuracy_metric(actual, predicted), 2)) + "%")
+
+    print("\n\nTest set error:")
     print(nn.calculate_total_error(test))
 
-    for row in test:
-        print(nn.feed_forward(row[0]))
+    print("\nTest set accuracy:")
+    actual, predicted = predict_set(nn, test)
+    print(str(round(accuracy_metric(actual, predicted), 2)) + "%")
 
-    print("output")
-    print(nn.feed_forward([6,148,72,35,0,33.6,0.627,50]))
+    # for row in test:
+        # print(nn.feed_forward(row[0]))
+
+    print("\nSingle test: model output vs predicted")
+    print(nn.feed_forward(test[0][0]))
+    print(test[0][1])
 
     ###
     # Blog post example:
