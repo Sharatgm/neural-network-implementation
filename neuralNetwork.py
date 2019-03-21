@@ -1,6 +1,7 @@
 import random
 import math
-
+from csv import reader
+import numpy as np
 #
 # Shorthand:
 #   "pd_" as a variable prefix means "partial derivative"
@@ -17,6 +18,78 @@ import math
 #   https://class.coursera.org/neuralnets-2012-001/lecture/39
 # [3] The Back Propagation Algorithm
 #   https://www4.rgu.ac.uk/files/chapter3%20-%20bp.pdf
+
+
+# Load a CSV file
+def load_csv(filename):
+    dataset = list()
+    with open(filename, 'r') as file:
+        csv_reader = reader(file)
+        for row in csv_reader:
+            if not row:
+                continue
+            dataset.append(row)
+    for i in range(len(dataset[0])):
+        str_column_to_float(dataset, i)
+    # normalize
+    minmax = dataset_minmax(dataset)
+    normalize_dataset(dataset, minmax)
+    return dataset
+
+
+# Find the min and max values for each column
+def dataset_minmax(dataset):
+    minmax = list()
+    for i in range(len(dataset[0])):
+        col_values = [row[i] for row in dataset]
+        value_min = min(col_values)
+        value_max = max(col_values)
+        minmax.append([value_min, value_max])
+    return minmax
+
+
+# Rescale dataset columns to the range 0-1
+def normalize_dataset(dataset, minmax):
+    for row in dataset:
+        for i in range(len(row)):
+            row[i] = (row[i] - minmax[i][0]) / (minmax[i][1] - minmax[i][0])
+
+
+# Split data into train and test
+def split_train_test(x, train_portion):
+    train_num_rows = round(train_portion * (len(x)))
+    # pick your indices for sample 1 and sample 2:
+    s1 = np.random.choice(range(x.shape[0]), train_num_rows, replace=False)
+    s2 = list(set(range(x.shape[0])) - set(s1))
+    # extract samples:
+    train = x[s1]
+    test = x[s2]
+
+    # Format train set
+    f_train = []
+    for row in train:
+        r = []
+        row_li = row.tolist()
+        r.append(row_li[0:-1])
+        r.append([row_li[-1]])
+        f_train.append(r)
+
+    # Format test set
+    f_test = []
+    for row in test:
+        r = []
+        row_li = row.tolist()
+        r.append(row_li[0:-1])
+        r.append([row_li[-1]])
+        f_test.append(r)
+
+    return f_train, f_test
+
+
+# Convert string column to float
+def str_column_to_float(dataset, column):
+    for row in dataset:
+        row[column] = float(row[column].strip())
 
 
 class NeuralNetwork:
@@ -231,26 +304,79 @@ class Neuron:
         return self.inputs[index]
 
 
-###
-# Blog post example:
-nn = NeuralNetwork(learning_rate=0.5, num_inputs=2, num_hidden=2, num_outputs=2,
-                   hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
-                   output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
-for i in range(10000):
-    nn.train([0.05, 0.1], [0.01, 0.99])
-    print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
+# predict y values for a complete set
+def predict_set(nn, x_set, params):
+    result = []
+    for i in range(0, len(x_set)):
+        y_hat = nn.predict(params, x_set[i])
+        result.append(round(y_hat))
+    return result
 
-# XOR example:
 
-# training_sets = [
-#     [[0, 0], [0]],
-#     [[0, 1], [1]],
-#     [[1, 0], [1]],
-#     [[1, 1], [0]]
-# ]
+# Calculate accuracy percentage
+def accuracy_metric(actual, predicted):
+    correct = 0
+    for i in range(len(actual)):
+        if actual[i] == round(predicted[i]):
+            correct += 1
+    return correct / float(len(actual)) * 100.0
 
-# nn = NeuralNetwork(0.5, len(training_sets[0][0]), 5, len(training_sets[0][1]))
-# for i in range(10000):
-#     training_inputs, training_outputs = random.choice(training_sets)
-#     nn.train(training_inputs, training_outputs)
-#     print(i, nn.calculate_total_error(training_sets))
+
+def main():
+    train_size = 0.9
+    l_rate = 0.3
+    num_epoch = 50
+
+    # load and prepare data
+    filename = 'pima-indians-diabetes.csv'
+    dataset = np.array(load_csv(filename))
+    print("\ndataset.shape:")
+    print(dataset.shape)
+
+    # split and format train and test set from dataset
+    train, test = split_train_test(dataset, train_size)
+
+    nn = NeuralNetwork(l_rate, len(train[0][0]), 5, len(train[0][1]))
+    for i in range(num_epoch):
+        training_inputs, training_outputs = random.choice(train)
+        nn.train(training_inputs, training_outputs)
+        print(i, nn.calculate_total_error(train))
+
+    print("\nTest set error:")
+    print(nn.calculate_total_error(test))
+
+    for row in test:
+        print(nn.feed_forward(row[0]))
+
+    print("output")
+    print(nn.feed_forward([6,148,72,35,0,33.6,0.627,50]))
+
+    ###
+    # Blog post example:
+    # nn = NeuralNetwork(learning_rate=l_rate, num_inputs=2, num_hidden=2, num_outputs=2,
+    #                    hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
+    #                    output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
+    # for i in range(num_epoch):
+    #     nn.train([0.05, 0.1], [0.01, 0.99])
+    #     print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
+
+    # XOR example:
+
+    # training_sets = [
+    #     [[0, 0], [0]],
+    #     [[0, 1], [1]],
+    #     [[1, 0], [1]],
+    #     [[1, 1], [0]]
+    # ]
+    #
+    # nn = NeuralNetwork(l_rate, len(training_sets[0][0]), 5, len(training_sets[0][1]))
+    # for i in range(num_epoch):
+    #     training_inputs, training_outputs = random.choice(training_sets)
+    #     nn.train(training_inputs, training_outputs)
+    #     print(i, nn.calculate_total_error(training_sets))
+
+
+if __name__ == "__main__":
+    main()
+
+
