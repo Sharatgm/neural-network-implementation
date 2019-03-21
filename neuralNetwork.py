@@ -93,31 +93,44 @@ def str_column_to_float(dataset, column):
 
 
 class NeuralNetwork:
-    def __init__(self, learning_rate, num_inputs, num_hidden, num_outputs, hidden_layer_weights=None, 
+    def __init__(self, learning_rate, num_inputs, num_hidden_neurons, num_outputs, num_hidden_layers, hidden_layer_weights=None,
                  hidden_layer_bias=None, output_layer_weights=None, output_layer_bias=None):
         self.learning_rate = learning_rate
         self.num_inputs = num_inputs
+        self.hidden_layers = []
 
-        self.hidden_layer = NeuronLayer(num_hidden, hidden_layer_bias)
+        for i in range(0,num_hidden_layers):
+            self.hidden_layers.append(NeuronLayer(num_hidden_neurons, hidden_layer_bias))
         self.output_layer = NeuronLayer(num_outputs, output_layer_bias)
 
         self.init_weights_from_inputs_to_hidden_layer_neurons(hidden_layer_weights)
         self.init_weights_from_hidden_layer_neurons_to_output_layer_neurons(output_layer_weights)
+        self.init_weights_from_hidden_layer_neurons_to_hidden_layer_neurons(hidden_layer_weights)
 
     def init_weights_from_inputs_to_hidden_layer_neurons(self, hidden_layer_weights):
         weight_num = 0
-        for h in range(len(self.hidden_layer.neurons)):
+        for h in range(len(self.hidden_layers[0].neurons)):
             for i in range(self.num_inputs):
                 if not hidden_layer_weights:
-                    self.hidden_layer.neurons[h].weights.append(random.random())
+                    self.hidden_layers[0].neurons[h].weights.append(random.random())
                 else:
-                    self.hidden_layer.neurons[h].weights.append(hidden_layer_weights[weight_num])
+                    self.hidden_layers[0].neurons[h].weights.append(hidden_layer_weights[0][weight_num])
                 weight_num += 1
+
+    def init_weights_from_hidden_layer_neurons_to_hidden_layer_neurons(self, hidden_layer_weights):
+        for l in range(1, len(self.hidden_layers)):
+            for h in range(len(self.hidden_layers[l].neurons)):
+                for i in range(len(self.hidden_layers[l-1].neurons)):
+                    if not hidden_layer_weights:
+                        self.hidden_layers[l].neurons[h].weights.append(random.random())
+                    else:
+                        self.hidden_layers[l].neurons[h].weights.append(hidden_layer_weights[l][i])
+
 
     def init_weights_from_hidden_layer_neurons_to_output_layer_neurons(self, output_layer_weights):
         weight_num = 0
         for o in range(len(self.output_layer.neurons)):
-            for h in range(len(self.hidden_layer.neurons)):
+            for h in range(len(self.hidden_layers[-1].neurons)):
                 if not output_layer_weights:
                     self.output_layer.neurons[o].weights.append(random.random())
                 else:
@@ -128,60 +141,67 @@ class NeuralNetwork:
         print('------')
         print('* Inputs: {}'.format(self.num_inputs))
         print('------')
-        print('Hidden Layer')
-        self.hidden_layer.inspect()
-        print('------')
+        for i in range(len(self.hidden_layers)):
+            print('Hidden Layer', i)
+            self.hidden_layers[i].inspect()
+            print('------')
         print('* Output Layer')
         self.output_layer.inspect()
         print('------')
 
     def feed_forward(self, inputs):
-        hidden_layer_outputs = self.hidden_layer.feed_forward(inputs)
-        return self.output_layer.feed_forward(hidden_layer_outputs)
+        for layer in self.hidden_layers:
+            inputs = layer.feed_forward(inputs)
+        return self.output_layer.feed_forward(inputs)
 
     # Uses online learning, ie updating the weights after each training case
     def train(self, training_inputs, training_outputs):
         self.feed_forward(training_inputs)
-
+        #print('Output:', self.output_layer.get_outputs())
         # 1. Output neuron deltas
-        pd_errors_wrt_output_neuron_total_net_input = [0] * len(self.output_layer.neurons)
+        deltas_output_layer = [0] * len(self.output_layer.neurons)
         for o in range(len(self.output_layer.neurons)):
 
             # ∂E/∂zⱼ
-            pd_errors_wrt_output_neuron_total_net_input[o] = self.output_layer.neurons[o].calculate_pd_error_wrt_total_net_input(training_outputs[o])
+            deltas_output_layer[o] = self.output_layer.neurons[o].calculate_delta(training_outputs[o])
 
         # 2. Hidden neuron deltas
-        pd_errors_wrt_hidden_neuron_total_net_input = [0] * len(self.hidden_layer.neurons)
-        for h in range(len(self.hidden_layer.neurons)):
+        deltas_hidden_layers = [[0] * len(self.hidden_layers[0].neurons)] * len(self.hidden_layers)
+        for l in range(len(self.hidden_layers)-1,0):
+            for h in range(len(self.hidden_layers[l].neurons)):
 
-            # We need to calculate the derivative of the error with respect to the output of each hidden layer neuron
-            # dE/dyⱼ = Σ ∂E/∂zⱼ * ∂z/∂yⱼ = Σ ∂E/∂zⱼ * wᵢⱼ
-            d_error_wrt_hidden_neuron_output = 0
-            for o in range(len(self.output_layer.neurons)):
-                d_error_wrt_hidden_neuron_output += pd_errors_wrt_output_neuron_total_net_input[o] * self.output_layer.neurons[o].weights[h]
-
-            # ∂E/∂zⱼ = dE/dyⱼ * ∂zⱼ/∂
-            pd_errors_wrt_hidden_neuron_total_net_input[h] = d_error_wrt_hidden_neuron_output * self.hidden_layer.neurons[h].calculate_pd_total_net_input_wrt_input()
+                # We need to calculate the derivative of the error with respect to the output of each hidden layer neuron
+                # dE/dyⱼ = Σ ∂E/∂zⱼ * ∂z/∂yⱼ = Σ ∂E/∂zⱼ * wᵢⱼ
+                d_error_wrt_hidden_neuron_output = 0
+                if (l == len(self.hidden_layers[l])-1): # Use the output to get the deltas of last hidden layer
+                    for o in range(len(self.output_layer.neurons)):
+                        d_error_wrt_hidden_neuron_output += deltas_output_layer[o] * self.output_layer.neurons[o].weights[h]
+                else:
+                    for o in range(len(self.hidden_layers[l+1].neurons)):
+                        d_error_wrt_hidden_neuron_output += deltas_hidden_layer[l+1][o] * self.hidden_layers[l+1].neurons[o].weights[h]
+                # ∂E/∂zⱼ = dE/dyⱼ * ∂zⱼ/∂
+                deltas_hidden_layer[l][h] = d_error_wrt_hidden_neuron_output * self.hidden_layers[l].neurons[h].calculate_pd_logistic_function()
 
         # 3. Update output neuron weights
         for o in range(len(self.output_layer.neurons)):
             for w_ho in range(len(self.output_layer.neurons[o].weights)):
 
                 # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
-                pd_error_wrt_weight = pd_errors_wrt_output_neuron_total_net_input[o] * self.output_layer.neurons[o].calculate_pd_total_net_input_wrt_weight(w_ho)
+                gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
 
                 # Δw = α * ∂Eⱼ/∂wᵢ
-                self.output_layer.neurons[o].weights[w_ho] -= self.learning_rate * pd_error_wrt_weight
+                self.output_layer.neurons[o].weights[w_ho] -= self.learning_rate * gradient_wrt_weight
 
         # 4. Update hidden neuron weights
-        for h in range(len(self.hidden_layer.neurons)):
-            for w_ih in range(len(self.hidden_layer.neurons[h].weights)):
+        for l in range(len(self.hidden_layers)):
+            for h in range(len(self.hidden_layers[l].neurons)):
+                for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
 
-                # ∂Eⱼ/∂wᵢ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢ
-                pd_error_wrt_weight = pd_errors_wrt_hidden_neuron_total_net_input[h] * self.hidden_layer.neurons[h].calculate_pd_total_net_input_wrt_weight(w_ih)
+                    # ∂Eⱼ/∂wᵢ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢ
+                    gradient_wrt_weight = deltas_hidden_layers[l][h] * self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih)
 
-                # Δw = α * ∂Eⱼ/∂wᵢ
-                self.hidden_layer.neurons[h].weights[w_ih] -= self.learning_rate * pd_error_wrt_weight
+                    # Δw = α * ∂Eⱼ/∂wᵢ
+                    self.hidden_layers[l].neurons[h].weights[w_ih] -= self.learning_rate * gradient_wrt_weight
 
     def calculate_total_error(self, training_sets):
         total_error = 0
@@ -189,7 +209,7 @@ class NeuralNetwork:
             training_inputs, training_outputs = training_sets[t]
             self.feed_forward(training_inputs)
             for o in range(len(training_outputs)):
-                total_error += self.output_layer.neurons[o].calculate_error(training_outputs[o])
+                total_error += self.output_layer.neurons[o].calculate_error_mean_square(training_outputs[o])
         return total_error
 
 
@@ -265,11 +285,11 @@ class Neuron:
     # This value is also known as the delta (δ) [1]
     # δ = ∂E/∂zⱼ = ∂E/∂yⱼ * dyⱼ/dzⱼ
     #
-    def calculate_pd_error_wrt_total_net_input(self, target_output):
-        return self.calculate_pd_error_wrt_output(target_output) * self.calculate_pd_total_net_input_wrt_input()
+    def calculate_delta(self, target_output):
+        return self.calculate_pd_error_wrt_output(target_output) * self.calculate_pd_logistic_function()
 
     # The error for each neuron is calculated by the Mean Square Error method:
-    def calculate_error(self, target_output):
+    def calculate_error_mean_square(self, target_output):
         return 0.5 * (target_output - self.output) ** 2
 
     # The partial derivate of the error with respect to actual output then is calculated by:
@@ -292,7 +312,7 @@ class Neuron:
     #
     # The derivative (not partial derivative since there is only one variable) of the output then is:
     # dyⱼ/dzⱼ = yⱼ * (1 - yⱼ)
-    def calculate_pd_total_net_input_wrt_input(self):
+    def calculate_pd_logistic_function(self):
         return self.output * (1 - self.output)
 
     # The total net input is the weighted sum of all the inputs to the neuron and their respective weights:
@@ -300,7 +320,7 @@ class Neuron:
     #
     # The partial derivative of the total net input with respective to a given weight (with everything else held constant) then is:
     # = ∂zⱼ/∂wᵢ = some constant + 1 * xᵢw₁^(1-0) + some constant ... = xᵢ
-    def calculate_pd_total_net_input_wrt_weight(self, index):
+    def input_wrt_weight(self, index):
         return self.inputs[index]
 
 
@@ -325,58 +345,59 @@ def accuracy_metric(actual, predicted):
 def main():
     train_size = 0.9
     l_rate = 0.3
-    num_epoch = 50
+    num_epoch = 1000
 
-    # load and prepare data
-    filename = 'pima-indians-diabetes.csv'
-    dataset = np.array(load_csv(filename))
-    print("\ndataset.shape:")
-    print(dataset.shape)
+    # # load and prepare data
+    # filename = 'pima-indians-diabetes.csv'
+    # dataset = np.array(load_csv(filename))
+    # print("\ndataset.shape:")
+    # print(dataset.shape)
+    #
+    # # split and format train and test set from dataset
+    # train, test = split_train_test(dataset, train_size)
+    #
+    # nn = NeuralNetwork(l_rate, len(train[0][0]), 5, len(train[0][1]), 7)
+    # nn.inspect()
+    # for i in range(num_epoch):
+    #     training_inputs, training_outputs = random.choice(train)
+    #     nn.train(training_inputs, training_outputs)
+    #     print(i, nn.calculate_total_error(train))
+    #
+    # print("\nTest set error:")
+    # print(nn.calculate_total_error(test))
+    #
+    # for row in test:
+    #     print(nn.feed_forward(row[0]))
+    #
+    # print("output")
+    # print(nn.feed_forward([6,148,72,35,0,33.6,0.627,50]))
 
-    # split and format train and test set from dataset
-    train, test = split_train_test(dataset, train_size)
-
-    nn = NeuralNetwork(l_rate, len(train[0][0]), 5, len(train[0][1]))
-    for i in range(num_epoch):
-        training_inputs, training_outputs = random.choice(train)
-        nn.train(training_inputs, training_outputs)
-        print(i, nn.calculate_total_error(train))
-
-    print("\nTest set error:")
-    print(nn.calculate_total_error(test))
-
-    for row in test:
-        print(nn.feed_forward(row[0]))
-
-    print("output")
-    print(nn.feed_forward([6,148,72,35,0,33.6,0.627,50]))
-
-    ###
-    # Blog post example:
+    ##
+    #Blog post example:
     # nn = NeuralNetwork(learning_rate=l_rate, num_inputs=2, num_hidden=2, num_outputs=2,
     #                    hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
     #                    output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
     # for i in range(num_epoch):
     #     nn.train([0.05, 0.1], [0.01, 0.99])
     #     print(i, round(nn.calculate_total_error([[[0.05, 0.1], [0.01, 0.99]]]), 9))
-
-    # XOR example:
-
-    # training_sets = [
-    #     [[0, 0], [0]],
-    #     [[0, 1], [1]],
-    #     [[1, 0], [1]],
-    #     [[1, 1], [0]]
-    # ]
     #
-    # nn = NeuralNetwork(l_rate, len(training_sets[0][0]), 5, len(training_sets[0][1]))
-    # for i in range(num_epoch):
-    #     training_inputs, training_outputs = random.choice(training_sets)
-    #     nn.train(training_inputs, training_outputs)
-    #     print(i, nn.calculate_total_error(training_sets))
+    # #XOR example:
+
+    training_sets = [
+        [[0, 0], [0]],
+        [[0, 1], [1]],
+        [[1, 0], [1]],
+        [[1, 1], [0]]
+    ]
+
+    nn = NeuralNetwork(l_rate, len(training_sets[0][0]), 5, len(training_sets[0][1]), 1)
+    nn.inspect()
+    for i in range(num_epoch):
+        training_inputs, training_outputs = random.choice(training_sets)
+        nn.train(training_inputs, training_outputs)
+        #print('Expected: ', training_outputs)
+        print(i, nn.calculate_total_error(training_sets))
 
 
 if __name__ == "__main__":
     main()
-
-
