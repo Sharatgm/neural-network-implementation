@@ -2,6 +2,8 @@ import random
 import math
 from csv import reader
 import numpy as np
+from random import randrange
+
 
 # Load a CSV file
 def load_csv(filename):
@@ -76,7 +78,8 @@ def str_column_to_float(dataset, column):
 
 
 class NeuralNetwork:
-    def __init__(self, learning_rate, num_inputs, num_hidden_neurons, num_outputs, num_hidden_layers, reg_factor_over_n=0, hidden_layer_weights=None,
+    def __init__(self, learning_rate, num_inputs, num_hidden_neurons, num_outputs, num_hidden_layers,
+                 reg_factor_over_n=0.0, hidden_layer_weights=None,
                  hidden_layer_bias=None, output_layer_weights=None, output_layer_bias=None):
         self.learning_rate = learning_rate
         self.num_inputs = num_inputs
@@ -84,7 +87,7 @@ class NeuralNetwork:
 
         self.reg_factor_over_n = reg_factor_over_n
 
-        for i in range(0,num_hidden_layers):
+        for i in range(0, num_hidden_layers):
             self.hidden_layers.append(NeuronLayer(num_hidden_neurons, hidden_layer_bias))
         self.output_layer = NeuronLayer(num_outputs, output_layer_bias)
 
@@ -105,12 +108,11 @@ class NeuralNetwork:
     def init_weights_from_hidden_layer_neurons_to_hidden_layer_neurons(self, hidden_layer_weights):
         for l in range(1, len(self.hidden_layers)):
             for h in range(len(self.hidden_layers[l].neurons)):
-                for i in range(len(self.hidden_layers[l-1].neurons)):
+                for i in range(len(self.hidden_layers[l - 1].neurons)):
                     if not hidden_layer_weights:
                         self.hidden_layers[l].neurons[h].weights.append(random.random())
                     else:
                         self.hidden_layers[l].neurons[h].weights.append(hidden_layer_weights[l][i])
-
 
     def init_weights_from_hidden_layer_neurons_to_output_layer_neurons(self, output_layer_weights):
         weight_num = 0
@@ -150,21 +152,24 @@ class NeuralNetwork:
 
         # 2. Hidden neuron deltas
         deltas_hidden_layer = [[0] * len(self.hidden_layers[0].neurons)] * len(self.hidden_layers)
-        for l in range(len(self.hidden_layers)-1,0):
+        for l in range(len(self.hidden_layers) - 1, 0):
             for h in range(len(self.hidden_layers[l].neurons)):
 
                 d_error_wrt_hidden_neuron_output = 0
-                if (l == len(self.hidden_layers[l])-1): # Use the output to get the deltas of last hidden layer
+                if (l == len(self.hidden_layers[l]) - 1):  # Use the output to get the deltas of last hidden layer
                     for o in range(len(self.output_layer.neurons)):
-                        d_error_wrt_hidden_neuron_output += deltas_output_layer[o] * self.output_layer.neurons[o].weights[h]
+                        d_error_wrt_hidden_neuron_output += deltas_output_layer[o] * \
+                                                            self.output_layer.neurons[o].weights[h]
                 else:
-                    for o in range(len(self.hidden_layers[l+1].neurons)):
-                        d_error_wrt_hidden_neuron_output += deltas_hidden_layer[l+1][o] * self.hidden_layers[l+1].neurons[o].weights[h]
+                    for o in range(len(self.hidden_layers[l + 1].neurons)):
+                        d_error_wrt_hidden_neuron_output += deltas_hidden_layer[l + 1][o] * \
+                                                            self.hidden_layers[l + 1].neurons[o].weights[h]
 
-                deltas_hidden_layer[l][h] = d_error_wrt_hidden_neuron_output * self.hidden_layers[l].neurons[h].calculate_pd_logistic_function()
+                deltas_hidden_layer[l][h] = d_error_wrt_hidden_neuron_output * self.hidden_layers[l].neurons[
+                    h].calculate_pd_logistic_function()
 
         # Check if regulation is needed
-        if (self.reg_factor_over_n != 0): # With regularization
+        if (self.reg_factor_over_n != 0):  # With regularization
 
             # 3. Update output neuron weights
             for o in range(len(self.output_layer.neurons)):
@@ -173,20 +178,25 @@ class NeuralNetwork:
                     gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
 
                     # Update weight with regularization -> newW = (1 - l_rate * (reg_factor / n_samples)) * weight - l_rate * weight
-                    self.output_layer.neurons[o].weights[w_ho] = (1 - self.learning_rate * self.reg_factor_over_n) * self.output_layer.neurons[o].weights[w_ho] - self.learning_rate * gradient_wrt_weight
+                    self.output_layer.neurons[o].weights[w_ho] = (1 - self.learning_rate * self.reg_factor_over_n) * \
+                                                                 self.output_layer.neurons[o].weights[
+                                                                     w_ho] - self.learning_rate * gradient_wrt_weight
 
             # 4. Update hidden neuron weights
             for l in range(len(self.hidden_layers)):
                 for h in range(len(self.hidden_layers[l].neurons)):
                     for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
-
                         # Calculate the gradient -> a * delta
-                        gradient_wrt_weight =  self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih) * deltas_hidden_layer[l][h]
+                        gradient_wrt_weight = self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih) * \
+                                              deltas_hidden_layer[l][h]
 
                         # Update weight with regularization -> newW = (1 - l_rate * (reg_factor / n_samples)) * weight - l_rate * weight
-                        self.hidden_layers[l].neurons[h].weights[w_ih] = (1 - self.learning_rate * self.reg_factor_over_n)*self.hidden_layers[l].neurons[h].weights[w_ih] - self.learning_rate * gradient_wrt_weight
+                        self.hidden_layers[l].neurons[h].weights[w_ih] = (
+                                                                                     1 - self.learning_rate * self.reg_factor_over_n) * \
+                                                                         self.hidden_layers[l].neurons[h].weights[
+                                                                             w_ih] - self.learning_rate * gradient_wrt_weight
 
-        else: # Without regularization
+        else:  # Without regularization
 
             # 3. Update output neuron weights
             for o in range(len(self.output_layer.neurons)):
@@ -201,13 +211,12 @@ class NeuralNetwork:
             for l in range(len(self.hidden_layers)):
                 for h in range(len(self.hidden_layers[l].neurons)):
                     for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
-
                         # Calculate the gradient -> a * delta
-                        gradient_wrt_weight = deltas_hidden_layer[l][h] * self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih)
+                        gradient_wrt_weight = deltas_hidden_layer[l][h] * self.hidden_layers[l].neurons[
+                            h].input_wrt_weight(w_ih)
 
                         # Update weight without regularization -> newW = weight - l_rate * gradient
                         self.hidden_layers[l].neurons[h].weights[w_ih] -= self.learning_rate * gradient_wrt_weight
-
 
     def calculate_total_error(self, training_sets):
         total_error = 0
@@ -323,12 +332,48 @@ def accuracy_metric(actual, predicted):
     return correct / float(len(actual)) * 100.0
 
 
+# Split a dataset into k folds
+def cross_validation_split(dataset, n_folds):
+    dataset_split = list()
+    dataset_copy = list(dataset)
+    fold_size = int(len(dataset) / n_folds)
+    for i in range(n_folds):
+        fold = list()
+        while len(fold) < fold_size:
+            index = randrange(len(dataset_copy))
+            fold.append(dataset_copy.pop(index))
+        dataset_split.append(fold)
+    return dataset_split
+
+
+def cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, num_epoch):
+    folds = cross_validation_split(train, n_folds)
+    scores = list()
+    for fold in folds:
+        fold_train_set = list(folds)
+        fold_train_set.remove(fold)
+        fold_test_set = list(fold)
+        reg_factor_over_n = regularization_factor / len(fold_test_set)
+        nn = NeuralNetwork(l_rate, len(fold_train_set[0][0][0]), 20, len(fold_train_set[0][0][1]), n_hidden_layers,
+                           reg_factor_over_n)
+        for i in range(num_epoch):
+            for fold_i in range(0, len(fold_train_set)) :
+                for j in range(0, len(fold_train_set[fold_i])):
+                    training_input, training_output = fold_train_set[fold_i][j]
+                    nn.train(training_input, training_output)
+        actual, predicted = predict_set(nn, fold_test_set)
+        accuracy = accuracy_metric(actual, predicted)
+        scores.append(accuracy)
+    return scores
+
+
 def main():
-    train_size = 0.8
+    train_size = 0.9
+    n_folds = 5
     l_rate = 0.03
-    num_epoch = 200000
     regularization_factor = 0.1
-    reg_factor_over_n = 0.1/num_epoch
+    n_hidden_layers = 1
+    num_epoch = 100
 
     # load and prepare data
     filename = 'pima-indians-diabetes.csv'
@@ -339,10 +384,17 @@ def main():
     # split and format train and test set from dataset
     train, test = split_train_test(dataset, train_size)
 
-    nn = NeuralNetwork(l_rate, len(train[0][0]), 20, len(train[0][1]), 1)
+    scores = cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, num_epoch)
+    print(scores)
+    print(sum(scores) / len(scores))
+
+    reg_factor_over_n = regularization_factor / len(train)
+    nn = NeuralNetwork(l_rate, len(train[0][0]), 20, len(train[0][1]), n_hidden_layers, reg_factor_over_n)
     for i in range(num_epoch):
-        training_inputs, training_outputs = random.choice(train)
-        nn.train(training_inputs, training_outputs)
+        for j in range(len(train)):
+            training_input = train[j][0]
+            training_output = train[j][1]
+            nn.train(training_input, training_output)
 
     print("\nTrain set error:")
     train_error = nn.calculate_total_error(train)
@@ -364,14 +416,14 @@ def main():
     print(str(round(test_error - train_error)) + "%")
 
     # for row in test:
-        # print(nn.feed_forward(row[0]))
+    # print(nn.feed_forward(row[0]))
 
     print("\nSingle test: model output vs predicted")
     print(nn.feed_forward(test[0][0]))
     print(test[0][1])
 
     ##
-    #Blog post example:
+    # Blog post example:
     # nn = NeuralNetwork(learning_rate=l_rate, num_inputs=2, num_hidden=2, num_outputs=2,
     #                    hidden_layer_weights=[0.15, 0.2, 0.25, 0.3], hidden_layer_bias=0.35,
     #                    output_layer_weights=[0.4, 0.45, 0.5, 0.55], output_layer_bias=0.6)
