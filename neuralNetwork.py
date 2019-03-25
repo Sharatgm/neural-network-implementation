@@ -93,11 +93,13 @@ def str_column_to_float(dataset, column):
 
 
 class NeuralNetwork:
-    def __init__(self, learning_rate, num_inputs, num_hidden_neurons, num_outputs, num_hidden_layers, hidden_layer_weights=None,
+    def __init__(self, learning_rate, num_inputs, num_hidden_neurons, num_outputs, num_hidden_layers, reg_factor_over_n=0, hidden_layer_weights=None,
                  hidden_layer_bias=None, output_layer_weights=None, output_layer_bias=None):
         self.learning_rate = learning_rate
         self.num_inputs = num_inputs
         self.hidden_layers = []
+
+        self.reg_factor_over_n = reg_factor_over_n
 
         for i in range(0,num_hidden_layers):
             self.hidden_layers.append(NeuronLayer(num_hidden_neurons, hidden_layer_bias))
@@ -184,14 +186,23 @@ class NeuralNetwork:
 
         # 3. Update output neuron weights
         for o in range(len(self.output_layer.neurons)):
-            for w_ho in range(len(self.output_layer.neurons[o].weights)):
+            if (self.reg_factor_over_n != 0):
+                for w_ho in range(len(self.output_layer.neurons[o].weights)):
 
-                # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
-                gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
+                    # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
+                    gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
 
-                # Δw = α * ∂Eⱼ/∂wᵢ
-                self.output_layer.neurons[o].weights[w_ho] -= self.learning_rate * gradient_wrt_weight
+                    # Δw = α * ∂Eⱼ/∂wᵢ
+                    self.output_layer.neurons[o].weights[w_ho] = (1 - self.learning_rate * self.reg_factor_over_n) * self.output_layer.neurons[o].weights[w_ho] - self.learning_rate * gradient_wrt_weight
 
+            else:
+                for w_ho in range(len(self.output_layer.neurons[o].weights)):
+
+                    # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
+                    gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
+
+                    # Δw = α * ∂Eⱼ/∂wᵢ
+                    self.output_layer.neurons[o].weights[w_ho] -= self.learning_rate * gradient_wrt_weight
         # 4. Update hidden neuron weights
         for l in range(len(self.hidden_layers)):
             for h in range(len(self.hidden_layers[l].neurons)):
@@ -348,6 +359,8 @@ def main():
     train_size = 0.8
     l_rate = 0.03
     num_epoch = 200000
+    regularization_factor = 0.1
+    reg_factor_over_n = 0.1/num_epoch
 
     # load and prepare data
     filename = 'pima-indians-diabetes.csv'
@@ -364,19 +377,23 @@ def main():
         nn.train(training_inputs, training_outputs)
 
     print("\nTrain set error:")
-    print(nn.calculate_total_error(train))
+    train_error = nn.calculate_total_error(train)
+    print(train_error)
 
     print("\nTrain set accuracy:")
     actual, predicted = predict_set(nn, train)
     print(str(round(accuracy_metric(actual, predicted), 2)) + "%")
 
     print("\n\nTest set error:")
-    print(nn.calculate_total_error(test))
+    test_error = nn.calculate_total_error(test)
+    print(test_error)
 
     print("\nTest set accuracy:")
     actual, predicted = predict_set(nn, test)
     print(str(round(accuracy_metric(actual, predicted), 2)) + "%")
 
+    print("\nModel variance:")
+    print(str(round(test_error - train_error)) + "%")
     # for row in test:
         # print(nn.feed_forward(row[0]))
 
