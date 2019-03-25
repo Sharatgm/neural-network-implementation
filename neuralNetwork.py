@@ -3,6 +3,10 @@ import math
 from csv import reader
 import numpy as np
 from random import randrange
+import matplotlib.pylab as plt
+
+# global variable to store the errors/loss for visualisation
+__errors__ = []
 
 
 # Load a CSV file
@@ -346,7 +350,7 @@ def cross_validation_split(dataset, n_folds):
     return dataset_split
 
 
-def cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, num_epoch):
+def cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, n_neurons, num_epoch):
     folds = cross_validation_split(train, n_folds)
     scores = list()
     for fold in folds:
@@ -354,7 +358,7 @@ def cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layer
         fold_train_set.remove(fold)
         fold_test_set = list(fold)
         reg_factor_over_n = regularization_factor / len(fold_test_set)
-        nn = NeuralNetwork(l_rate, len(fold_train_set[0][0][0]), 20, len(fold_train_set[0][0][1]), n_hidden_layers,
+        nn = NeuralNetwork(l_rate, len(fold_train_set[0][0][0]), n_neurons, len(fold_train_set[0][0][1]), n_hidden_layers,
                            reg_factor_over_n)
         for i in range(num_epoch):
             for fold_i in range(0, len(fold_train_set)) :
@@ -370,10 +374,11 @@ def cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layer
 def main():
     train_size = 0.9
     n_folds = 5
-    l_rate = 0.03
-    regularization_factor = 0.1
-    n_hidden_layers = 1
-    num_epoch = 100
+    l_rate = 0.003
+    regularization_factor = 0
+    n_hidden_layers = 3
+    n_neurons = 16
+    num_epoch = 10000
 
     # load and prepare data
     filename = 'pima-indians-diabetes.csv'
@@ -384,17 +389,25 @@ def main():
     # split and format train and test set from dataset
     train, test = split_train_test(dataset, train_size)
 
-    scores = cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, num_epoch)
-    print(scores)
-    print(sum(scores) / len(scores))
+    #scores = cross_validate(train, n_folds, regularization_factor, l_rate, n_hidden_layers, n_neurons, num_epoch)
+    #print(scores)
+    #print(sum(scores) / len(scores))
 
     reg_factor_over_n = regularization_factor / len(train)
-    nn = NeuralNetwork(l_rate, len(train[0][0]), 20, len(train[0][1]), n_hidden_layers, reg_factor_over_n)
-    for i in range(num_epoch):
+    nn = NeuralNetwork(l_rate, len(train[0][0]), n_neurons, len(train[0][1]), n_hidden_layers, reg_factor_over_n)
+    for epoch in range(num_epoch):
         for j in range(len(train)):
             training_input = train[j][0]
             training_output = train[j][1]
             nn.train(training_input, training_output)
+        __errors__.append(nn.calculate_total_error(train))
+        if epoch > 2:
+            if __errors__[epoch-1] > (__errors__[epoch-2] + 1):
+                print("\nDiverging")
+                break
+        if epoch % 100 == 0:
+            print(epoch)
+            print(__errors__[epoch-1])
 
     print("\nTrain set error:")
     train_error = nn.calculate_total_error(train)
@@ -421,6 +434,11 @@ def main():
     print("\nSingle test: model output vs predicted")
     print(nn.feed_forward(test[0][0]))
     print(test[0][1])
+
+    # plot square mean error
+    num_epochs_error = range(1, len(__errors__) + 1)
+    plt.plot(num_epochs_error, __errors__)
+    plt.show()
 
     ##
     # Blog post example:
