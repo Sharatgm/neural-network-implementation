@@ -2,23 +2,6 @@ import random
 import math
 from csv import reader
 import numpy as np
-#
-# Shorthand:
-#   "pd_" as a variable prefix means "partial derivative"
-#   "d_" as a variable prefix means "derivative"
-#   "_wrt_" is shorthand for "with respect to"
-#   "w_ho" and "w_ih" are the index of weights from hidden to output layer neurons and input to hidden layer
-#   neurons respectively
-#
-# Comment references:
-#
-# [1] Wikipedia article on Backpropagation
-#   http://en.wikipedia.org/wiki/Backpropagation#Finding_the_derivative_of_the_error
-# [2] Neural Networks for Machine Learning course on Coursera by Geoffrey Hinton
-#   https://class.coursera.org/neuralnets-2012-001/lecture/39
-# [3] The Back Propagation Algorithm
-#   https://www4.rgu.ac.uk/files/chapter3%20-%20bp.pdf
-
 
 # Load a CSV file
 def load_csv(filename):
@@ -159,12 +142,10 @@ class NeuralNetwork:
     # Uses online learning, ie updating the weights after each training case
     def train(self, training_inputs, training_outputs):
         self.feed_forward(training_inputs)
-        #print('Output:', self.output_layer.get_outputs())
+
         # 1. Output neuron deltas
         deltas_output_layer = [0] * len(self.output_layer.neurons)
         for o in range(len(self.output_layer.neurons)):
-
-            # ∂E/∂zⱼ
             deltas_output_layer[o] = self.output_layer.neurons[o].calculate_delta(training_outputs[o])
 
         # 2. Hidden neuron deltas
@@ -172,8 +153,6 @@ class NeuralNetwork:
         for l in range(len(self.hidden_layers)-1,0):
             for h in range(len(self.hidden_layers[l].neurons)):
 
-                # We need to calculate the derivative of the error with respect to the output of each hidden layer neuron
-                # dE/dyⱼ = Σ ∂E/∂zⱼ * ∂z/∂yⱼ = Σ ∂E/∂zⱼ * wᵢⱼ
                 d_error_wrt_hidden_neuron_output = 0
                 if (l == len(self.hidden_layers[l])-1): # Use the output to get the deltas of last hidden layer
                     for o in range(len(self.output_layer.neurons)):
@@ -181,38 +160,54 @@ class NeuralNetwork:
                 else:
                     for o in range(len(self.hidden_layers[l+1].neurons)):
                         d_error_wrt_hidden_neuron_output += deltas_hidden_layer[l+1][o] * self.hidden_layers[l+1].neurons[o].weights[h]
-                # ∂E/∂zⱼ = dE/dyⱼ * ∂zⱼ/∂
+
                 deltas_hidden_layer[l][h] = d_error_wrt_hidden_neuron_output * self.hidden_layers[l].neurons[h].calculate_pd_logistic_function()
 
-        # 3. Update output neuron weights
-        for o in range(len(self.output_layer.neurons)):
-            if (self.reg_factor_over_n != 0):
-                for w_ho in range(len(self.output_layer.neurons[o].weights)):
+        # Check if regulation is needed
+        if (self.reg_factor_over_n != 0): # With regularization
 
-                    # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
+            # 3. Update output neuron weights
+            for o in range(len(self.output_layer.neurons)):
+                for w_ho in range(len(self.output_layer.neurons[o].weights)):
+                    # Calculate the gradient of the weight
                     gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
 
-                    # Δw = α * ∂Eⱼ/∂wᵢ
+                    # Update weight with regularization -> newW = (1 - l_rate * (reg_factor / n_samples)) * weight - l_rate * weight
                     self.output_layer.neurons[o].weights[w_ho] = (1 - self.learning_rate * self.reg_factor_over_n) * self.output_layer.neurons[o].weights[w_ho] - self.learning_rate * gradient_wrt_weight
 
-            else:
-                for w_ho in range(len(self.output_layer.neurons[o].weights)):
+            # 4. Update hidden neuron weights
+            for l in range(len(self.hidden_layers)):
+                for h in range(len(self.hidden_layers[l].neurons)):
+                    for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
 
-                    # ∂Eⱼ/∂wᵢⱼ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢⱼ
+                        # Calculate the gradient -> a * delta
+                        gradient_wrt_weight =  self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih) * deltas_hidden_layer[l][h]
+
+                        # Update weight with regularization -> newW = (1 - l_rate * (reg_factor / n_samples)) * weight - l_rate * weight
+                        self.hidden_layers[l].neurons[h].weights[w_ih] = (1 - self.learning_rate * self.reg_factor_over_n)*self.hidden_layers[l].neurons[h].weights[w_ih] - self.learning_rate * gradient_wrt_weight
+
+        else: # Without regularization
+
+            # 3. Update output neuron weights
+            for o in range(len(self.output_layer.neurons)):
+                for w_ho in range(len(self.output_layer.neurons[o].weights)):
+                    # Calculate the gradient of the weight
                     gradient_wrt_weight = deltas_output_layer[o] * self.output_layer.neurons[o].input_wrt_weight(w_ho)
 
-                    # Δw = α * ∂Eⱼ/∂wᵢ
+                    # Update weight without regularization -> newW = weight - l_rate * gradient
                     self.output_layer.neurons[o].weights[w_ho] -= self.learning_rate * gradient_wrt_weight
-        # 4. Update hidden neuron weights
-        for l in range(len(self.hidden_layers)):
-            for h in range(len(self.hidden_layers[l].neurons)):
-                for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
 
-                    # ∂Eⱼ/∂wᵢ = ∂E/∂zⱼ * ∂zⱼ/∂wᵢ
-                    gradient_wrt_weight = deltas_hidden_layer[l][h] * self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih)
+            # 4. Update hidden neuron weights
+            for l in range(len(self.hidden_layers)):
+                for h in range(len(self.hidden_layers[l].neurons)):
+                    for w_ih in range(len(self.hidden_layers[l].neurons[h].weights)):
 
-                    # Δw = α * ∂Eⱼ/∂wᵢ
-                    self.hidden_layers[l].neurons[h].weights[w_ih] -= self.learning_rate * gradient_wrt_weight
+                        # Calculate the gradient -> a * delta
+                        gradient_wrt_weight = deltas_hidden_layer[l][h] * self.hidden_layers[l].neurons[h].input_wrt_weight(w_ih)
+
+                        # Update weight without regularization -> newW = weight - l_rate * gradient
+                        self.hidden_layers[l].neurons[h].weights[w_ih] -= self.learning_rate * gradient_wrt_weight
+
 
     def calculate_total_error(self, training_sets):
         total_error = 0
@@ -274,7 +269,6 @@ class Neuron:
             total += self.inputs[i] * self.weights[i]
         return total + self.bias
 
-    # The result is sometimes referred to as 'net' [2] or 'net' [1]
     def activate(self, total_net_input):
         return self.activation_fun(total_net_input)
 
@@ -288,14 +282,7 @@ class Neuron:
     def relu(total_net_input):
         return max(0, total_net_input)
 
-    # Determine how much the neuron's total input has to change to move closer to the expected output
-    #
-    # Now that we have the partial derivative of the error with respect to the output (∂E/∂yⱼ) and
-    # the derivative of the output with respect to the total net input (dyⱼ/dzⱼ) we can calculate
-    # the partial derivative of the error with respect to the total net input.
-    # This value is also known as the delta (δ) [1]
-    # δ = ∂E/∂zⱼ = ∂E/∂yⱼ * dyⱼ/dzⱼ
-    #
+    # Function to calculate deltas
     def calculate_delta(self, target_output):
         return self.calculate_pd_error_wrt_output(target_output) * self.calculate_pd_logistic_function()
 
@@ -303,34 +290,15 @@ class Neuron:
     def calculate_error_mean_square(self, target_output):
         return 0.5 * (target_output - self.output) ** 2
 
-    # The partial derivate of the error with respect to actual output then is calculated by:
-    # = 2 * 0.5 * (target output - actual output) ^ (2 - 1) * -1
-    # = -(target output - actual output)
-    #
-    # The Wikipedia article on backpropagation [1] simplifies to the following, but most other learning material does not [2]
-    # = actual output - target output
-    #
-    # Alternative, you can use (target - output), but then need to add it during backpropagation [3]
-    #
-    # Note that the actual output of the output neuron is often written as yⱼ and target output as tⱼ so:
-    # = ∂E/∂yⱼ = -(tⱼ - yⱼ)
+    # Partial derivative error of each neuron used to calculate the deltas
     def calculate_pd_error_wrt_output(self, target_output):
         return -(target_output - self.output)
 
-    # The total net input into the neuron is squashed using logistic function to calculate the neuron's output:
-    # yⱼ = φ = 1 / (1 + e^(-zⱼ))
-    # Note that where ⱼ represents the output of the neurons in whatever layer we're looking at and ᵢ represents the layer below it
-    #
-    # The derivative (not partial derivative since there is only one variable) of the output then is:
-    # dyⱼ/dzⱼ = yⱼ * (1 - yⱼ)
+    # The partial derivative of the logistic function used to calculate the deltas -> yⱼ * (1 - yⱼ)
     def calculate_pd_logistic_function(self):
         return self.output * (1 - self.output)
 
-    # The total net input is the weighted sum of all the inputs to the neuron and their respective weights:
-    # = zⱼ = netⱼ = x₁w₁ + x₂w₂ ...
-    #
-    # The partial derivative of the total net input with respective to a given weight (with everything else held constant) then is:
-    # = ∂zⱼ/∂wᵢ = some constant + 1 * xᵢw₁^(1-0) + some constant ... = xᵢ
+    # Returns the input with respect the weights to calculate the gradient (a)
     def input_wrt_weight(self, index):
         return self.inputs[index]
 
@@ -394,6 +362,7 @@ def main():
 
     print("\nModel variance:")
     print(str(round(test_error - train_error)) + "%")
+
     # for row in test:
         # print(nn.feed_forward(row[0]))
 
